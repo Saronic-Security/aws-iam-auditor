@@ -19,7 +19,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+import os
 import subprocess
+import urllib.request
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound, UnauthorizedSSOTokenError
@@ -34,6 +36,8 @@ OVERPRIVILEGED_POLICIES = {
     "arn:aws:iam::aws:policy/IAMFullAccess",
 }
 CIS_MIN_PASSWORD_LENGTH = 14
+RISK_INTEL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "risk_intel.json")
+RISK_INTEL_URL = "https://raw.githubusercontent.com/Saronic-Security/aws-iam-auditor/master/risk_intel.json"
 
 
 def days_since(date_str: str) -> int | None:
@@ -56,6 +60,58 @@ def finding(check: str, severity: str, resource: str, detail: str, data: dict | 
         "detail": detail,
         "data": data or {},
     }
+
+
+def load_risk_intel(update: bool = False) -> dict:
+    """Load risk intelligence data. Optionally fetch latest from GitHub first."""
+    if update:
+        print("[*] Fetching latest risk intelligence...", file=sys.stderr)
+        try:
+            req = urllib.request.Request(RISK_INTEL_URL, headers={"User-Agent": "aws-iam-auditor/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                remote_data = json.loads(resp.read().decode("utf-8"))
+            remote_ver = remote_data.get("_metadata", {}).get("version", "0")
+            local_data = {}
+            if os.path.exists(RISK_INTEL_FILE):
+                with open(RISK_INTEL_FILE, "r", encoding="utf-8") as f:
+                    local_data = json.load(f)
+            local_ver = local_data.get("_metadata", {}).get("version", "0")
+            if remote_ver >= local_ver:
+                with open(RISK_INTEL_FILE, "w", encoding="utf-8") as f:
+                    json.dump(remote_data, f, indent=2)
+                print(f"  [+] Risk intel updated to v{remote_ver} ({remote_data['_metadata']['last_updated']})", file=sys.stderr)
+            else:
+                print(f"  [+] Local risk intel v{local_ver} is already current", file=sys.stderr)
+        except Exception as e:
+            print(f"  [!] Could not fetch remote intel ({e}), using local copy", file=sys.stderr)
+
+    if os.path.exists(RISK_INTEL_FILE):
+        with open(RISK_INTEL_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        meta = data.get("_metadata", {})
+        print(f"[*] Risk intel loaded: v{meta.get('version', '?')} ({meta.get('last_updated', 'unknown')})", file=sys.stderr)
+        return data
+    else:
+        print("[!] No risk_intel.json found. Findings will not include threat context.", file=sys.stderr)
+        return {}
+
+
+def enrich_finding(f: dict, intel: dict) -> dict:
+    """Attach risk intelligence context to a finding."""
+    check = f["check"]
+    if check in intel:
+        ctx = intel[check]
+        f["risk_context"] = {
+            "cis_control": ctx.get("cis_control", "N/A"),
+            "priv_escalation": ctx.get("priv_escalation", False),
+            "data_leakage": ctx.get("data_leakage", False),
+            "lateral_movement": ctx.get("lateral_movement", False),
+            "initial_access": ctx.get("initial_access", False),
+            "mitre_attack": ctx.get("mitre_attack", []),
+            "real_incidents": ctx.get("real_incidents", []),
+            "threat_summary": ctx.get("threat_summary", ""),
+        }
+    return f
 
 
 class IAMScanner:
@@ -465,10 +521,19 @@ def main():
     parser = argparse.ArgumentParser(description="AWS IAM Hygiene Scanner")
     parser.add_argument("--profile", required=True, help="AWS CLI profile name")
     parser.add_argument("--output", default=None, help="Output file path (default: stdout)")
+    parser.add_argument("--update-intel", action="store_true", help="Fetch latest risk intelligence before scanning")
     args = parser.parse_args()
+
+    # Load risk intelligence before scanning
+    intel = load_risk_intel(update=args.update_intel)
 
     scanner = IAMScanner(args.profile)
     findings = scanner.scan()
+
+    # Enrich findings with threat context
+    findings = [enrich_finding(f, intel) for f in findings]
+    priv_esc_count = sum(1 for f in findings if f.get("risk_context", {}).get("priv_escalation"))
+    data_leak_count = sum(1 for f in findings if f.get("risk_context", {}).get("data_leakage"))
 
     result = {
         "account_id": scanner.account_id,
@@ -476,15 +541,22 @@ def main():
         "is_govcloud": scanner.is_govcloud,
         "scan_time": datetime.now(timezone.utc).isoformat(),
         "profile": args.profile,
+        "intel_version": intel.get("_metadata", {}).get("version", "unknown"),
+        "intel_updated": intel.get("_metadata", {}).get("last_updated", "unknown"),
         "total_findings": len(findings),
         "summary": {
             "CRITICAL": sum(1 for f in findings if f["severity"] == "CRITICAL"),
             "HIGH": sum(1 for f in findings if f["severity"] == "HIGH"),
             "MEDIUM": sum(1 for f in findings if f["severity"] == "MEDIUM"),
             "LOW": sum(1 for f in findings if f["severity"] == "LOW"),
+            "priv_escalation_risks": priv_esc_count,
+            "data_leakage_risks": data_leak_count,
         },
         "findings": findings,
     }
+
+    print(f"[*] {priv_esc_count} finding(s) flagged as privilege escalation risk", file=sys.stderr)
+    print(f"[*] {data_leak_count} finding(s) flagged as data leakage risk", file=sys.stderr)
 
     output = json.dumps(result, indent=2, default=str)
 

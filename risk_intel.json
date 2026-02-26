@@ -1,0 +1,176 @@
+{
+  "_metadata": {
+    "version": "1.0.0",
+    "last_updated": "2026-02-26",
+    "source": "CIS AWS Foundations Benchmark v3.0, MITRE ATT&CK, AWS CIRT, Rhino Security Labs"
+  },
+  "root_access_keys": {
+    "cis_control": "1.4",
+    "priv_escalation": true,
+    "data_leakage": true,
+    "lateral_movement": true,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1552.001"],
+    "real_incidents": [
+      "Code Spaces 2014 — company destroyed via root key compromise",
+      "Chegg 2018 — 40M user records exfiltrated via shared root credential",
+      "Cryptojacking campaigns 2022-2024 — root keys used to spin up mining instances"
+    ],
+    "threat_summary": "Root access keys provide unrestricted account access that cannot be limited by SCPs or permission boundaries. Leaked root keys are the #1 entry point in AWS CIRT-investigated incidents."
+  },
+  "root_no_mfa": {
+    "cis_control": "1.5, 1.6",
+    "priv_escalation": true,
+    "data_leakage": true,
+    "lateral_movement": true,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1110.004", "T1621"],
+    "real_incidents": [
+      "Scattered Spider/LUCR-3 identity campaigns 2023-2024",
+      "AWS Console rate-limit bypass enabling ~280 password attempts/min (Datadog 2024)"
+    ],
+    "threat_summary": "Root without MFA is vulnerable to credential stuffing, phishing, and password spray. AWS Console rate-limiting has known bypasses. Root access overrides all IAM controls including SCPs."
+  },
+  "user_no_mfa": {
+    "cis_control": "1.10",
+    "priv_escalation": false,
+    "data_leakage": true,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1110.004"],
+    "real_incidents": [
+      "Sisense 2024 — terabytes exfiltrated via MFA-less IAM user",
+      "LastPass 2022 — vault decryption keys stolen via compromised developer",
+      "Large-scale AWS credential theft campaign Dec 2024 — attackers targeted MFA-less users to create admin accounts"
+    ],
+    "threat_summary": "Console users without MFA are vulnerable to credential stuffing and phishing. In the Dec 2024 large-scale breach, attackers specifically targeted MFA-less IAM users to create additional admin accounts."
+  },
+  "stale_access_key": {
+    "cis_control": "1.14",
+    "priv_escalation": false,
+    "data_leakage": true,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1552.001", "T1078.004", "T1528"],
+    "real_incidents": [
+      "Uber 2016 — 57M records exfiltrated via unrotated keys in GitHub repo",
+      "Codecov supply chain attack 2021 — keys harvested from CI for 2 months",
+      "AWS CIRT: long-term credentials are the #1 initial access vector"
+    ],
+    "threat_summary": "Long-lived access keys are the top initial access vector per AWS CIRT. Supply chain attacks (Codecov) and repo leaks (Uber) specifically target unrotated keys. Longer lifetime = longer compromise window."
+  },
+  "unused_access_key": {
+    "cis_control": "1.12",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1552.001"],
+    "real_incidents": [
+      "Twitch 2021 — 6000+ repos with exposed credentials including unused keys",
+      "Postman workspace credential exposures — unused test keys with active permissions"
+    ],
+    "threat_summary": "Active but never-used keys are forgotten credentials with no usage baseline. GuardDuty and CloudTrail anomaly detection cannot alert on first use by an attacker because there is no normal behavior to compare against."
+  },
+  "stale_console_login": {
+    "cis_control": "1.12",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1110.004"],
+    "real_incidents": [
+      "IBM 2023 report: 16% of cloud breaches stem from orphaned/dormant IAM accounts"
+    ],
+    "threat_summary": "Dormant console accounts are invisible to their legitimate owner. Credential stuffing against these accounts goes unnoticed, and no one monitors for anomalous console sessions."
+  },
+  "stale_password": {
+    "cis_control": "1.10",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1110.004"],
+    "real_incidents": [
+      "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
+    ],
+    "threat_summary": "Passwords unchanged for >90 days are more likely to appear in breach databases. Combined with the AWS Console rate-limiting bypass (~280 attempts/min), stale passwords are brute-forceable."
+  },
+  "directly_attached_policy": {
+    "cis_control": "1.15",
+    "priv_escalation": true,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": false,
+    "mitre_attack": ["T1098", "T1078.004"],
+    "real_incidents": [
+      "Sysdig 2026 — AI-assisted 8-minute admin escalation via iam:AttachUserPolicy"
+    ],
+    "threat_summary": "Direct user policy attachment creates per-user attack surfaces. Rhino Security's iam:AttachUserPolicy and iam:PutUserPolicy escalation methods specifically target users with direct policies. Group/role-based policies centralize control and are auditable."
+  },
+  "inline_user_policy": {
+    "cis_control": "1.16",
+    "priv_escalation": true,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": false,
+    "mitre_attack": ["T1098"],
+    "real_incidents": [
+      "Rhino Security iam:PutUserPolicy — one of 21 documented IAM privilege escalation methods"
+    ],
+    "threat_summary": "Inline policies are invisible in the IAM Policy console, creating shadow permissions. The iam:PutUserPolicy escalation method exploits the expectation that inline policies on users are common and unmonitored."
+  },
+  "overprivileged_user": {
+    "cis_control": "1.16, 1.22",
+    "priv_escalation": true,
+    "data_leakage": true,
+    "lateral_movement": true,
+    "initial_access": false,
+    "mitre_attack": ["T1078.004", "T1098.001", "T1136.003"],
+    "real_incidents": [
+      "Capital One 2019 — 100M records, root cause was overprivileged role",
+      "Sysdig 2026 — attacker created backdoor-admin with AdministratorAccess in 8 minutes",
+      "Unit 42 — thousands of compromised workloads from misconfigured admin roles",
+      "Dec 2024 large-scale breach — admin keys called 'a jackpot for criminals'"
+    ],
+    "threat_summary": "Overprivileged users are the terminal escalation target. Capital One's breach root cause was an overprivileged role, not SSRF. In the 2026 Sysdig case, attackers created a backdoor-admin user with AdministratorAccess in 8 minutes."
+  },
+  "unused_role": {
+    "cis_control": "1.12 (related)",
+    "priv_escalation": true,
+    "data_leakage": false,
+    "lateral_movement": true,
+    "initial_access": false,
+    "mitre_attack": ["T1078.004", "T1098", "T1550.001"],
+    "real_incidents": [
+      "Aqua Security Shadow Roles — Black Hat 2024, default service roles enable cross-service lateral movement",
+      "Sysdig 2026 — attacker enumerated dormant roles and attempted assumption across accounts",
+      "Token Security 2025 — dormant roles with permissive trust policies are misconfigs hiding in plain sight"
+    ],
+    "threat_summary": "Unused roles with admin policies or permissive trust policies are prime escalation targets. Attackers enumerate dormant roles via iam:ListRoles and attempt assumption. Aqua's Shadow Roles research showed default service roles enable cross-service lateral movement."
+  },
+  "no_password_policy": {
+    "cis_control": "1.8, 1.9",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1110.001", "T1110.003", "T1110.004"],
+    "real_incidents": [
+      "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
+    ],
+    "threat_summary": "No password policy means AWS defaults apply (8 chars, no complexity). The AWS Console rate-limiting bypass allows ~280 attempts/min, making weak passwords brute-forceable."
+  },
+  "weak_password_policy": {
+    "cis_control": "1.8, 1.9",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1110.001", "T1110.003", "T1110.004"],
+    "real_incidents": [
+      "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
+    ],
+    "threat_summary": "Weak password policies make brute-force and credential stuffing feasible. Without reuse prevention, previously breached passwords remain valid."
+  }
+}
