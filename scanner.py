@@ -19,12 +19,15 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+import subprocess
+
 import boto3
-from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
+from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound, UnauthorizedSSOTokenError
 
 
 # --- Constants ---
 STALE_DAYS = 90
+GOVCLOUD_REGIONS = {"us-gov-west-1", "us-gov-east-1"}
 OVERPRIVILEGED_POLICIES = {
     "arn:aws:iam::aws:policy/AdministratorAccess",
     "arn:aws:iam::aws:policy/PowerUserAccess",
@@ -57,23 +60,129 @@ def finding(check: str, severity: str, resource: str, detail: str, data: dict | 
 
 class IAMScanner:
     def __init__(self, profile: str):
+        self.profile = profile
         try:
             self.session = boto3.Session(profile_name=profile)
-            self.iam = self.session.client("iam")
-            self.sts = self.session.client("sts")
         except ProfileNotFound:
-            print(f"ERROR: AWS profile '{profile}' not found. Check ~/.aws/credentials or ~/.aws/config.", file=sys.stderr)
-            sys.exit(1)
-        except NoCredentialsError:
-            print(f"ERROR: No credentials found for profile '{profile}'.", file=sys.stderr)
+            print(f"\nERROR: AWS profile '{profile}' not found.", file=sys.stderr)
+            print(f"Available profiles are configured in ~/.aws/credentials and ~/.aws/config.", file=sys.stderr)
+            print(f"\nTo set up a new profile:", file=sys.stderr)
+            print(f"  aws configure --profile {profile}", file=sys.stderr)
+            print(f"  # or for SSO:", file=sys.stderr)
+            print(f"  aws configure sso --profile {profile}", file=sys.stderr)
             sys.exit(1)
 
+        # Authenticate — handles SSO login if needed
+        self._authenticate()
+
+        self.iam = self.session.client("iam")
         self.account_id = self._get_account_id()
+        self.region = self.session.region_name or "us-east-1"
+        self.is_govcloud = self.region in GOVCLOUD_REGIONS
         self.findings: list[dict] = []
+
+        # GovCloud warning
+        if self.is_govcloud:
+            self._govcloud_warning()
+
+    def _authenticate(self):
+        """Verify credentials work. If SSO token is expired, prompt login."""
+        sts = self.session.client("sts")
+        try:
+            sts.get_caller_identity()
+        except (NoCredentialsError, ClientError, UnauthorizedSSOTokenError) as e:
+            error_str = str(e)
+            error_code = ""
+            if hasattr(e, "response"):
+                error_code = e.response.get("Error", {}).get("Code", "")
+            # Detect SSO-related failures: explicit SSO errors, incomplete signatures
+            # from stale tokens, or expired token errors
+            is_sso = (
+                "SSO" in error_str
+                or "UnauthorizedSSOTokenError" in type(e).__name__
+                or error_code in ("IncompleteSignature", "ExpiredToken", "InvalidIdentityToken")
+                or isinstance(e, NoCredentialsError)
+            )
+
+            if is_sso:
+                print(f"\n[!] SSO session expired for profile '{self.profile}'. Logging in...", file=sys.stderr)
+                result = subprocess.run(
+                    ["aws", "sso", "login", "--profile", self.profile],
+                    capture_output=False,
+                )
+                if result.returncode != 0:
+                    print(f"\nERROR: SSO login failed for profile '{self.profile}'.", file=sys.stderr)
+                    print(f"", file=sys.stderr)
+                    print(f"  This usually means the profile is not configured properly.", file=sys.stderr)
+                    print(f"  Check that your ~/.aws/config has the correct SSO settings:", file=sys.stderr)
+                    print(f"", file=sys.stderr)
+                    print(f"    [profile {self.profile}]", file=sys.stderr)
+                    print(f"    sso_start_url = https://your-org.awsapps.com/start", file=sys.stderr)
+                    print(f"    sso_region = us-east-1", file=sys.stderr)
+                    print(f"    sso_account_id = 123456789012", file=sys.stderr)
+                    print(f"    sso_role_name = YourRoleName", file=sys.stderr)
+                    print(f"    region = us-east-1", file=sys.stderr)
+                    print(f"", file=sys.stderr)
+                    print(f"  To reconfigure this profile:", file=sys.stderr)
+                    print(f"    aws configure sso --profile {self.profile}", file=sys.stderr)
+                    sys.exit(1)
+                # Recreate session after login
+                self.session = boto3.Session(profile_name=self.profile)
+                # Verify it works now
+                try:
+                    self.session.client("sts").get_caller_identity()
+                except Exception as e2:
+                    print(f"\nERROR: Still cannot authenticate after SSO login: {e2}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                print(f"\nERROR: Cannot authenticate with profile '{self.profile}'.", file=sys.stderr)
+                print(f"  {e}", file=sys.stderr)
+                print(f"\nTry one of:", file=sys.stderr)
+                print(f"  aws sso login --profile {self.profile}", file=sys.stderr)
+                print(f"  aws configure --profile {self.profile}", file=sys.stderr)
+                sys.exit(1)
+
+        print(f"[*] Authenticated to profile '{self.profile}'", file=sys.stderr)
+
+    def _govcloud_warning(self):
+        """Print a loud warning when scanning a GovCloud account."""
+        warning = """
+================================================================================
+
+  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)
+
+         YO! This is GOVCLOUD. Be careful and shit.
+
+    /\\_/\\
+   ( O_O )  <  I'm watching you, buddy.
+    > ^ <       Region:  {region}
+                Account: {account}
+
+  - This is a regulated environment (FedRAMP, ITAR, DoD, etc.)
+  - All actions are read-only, but EVERYTHING is logged
+  - Do NOT copy findings to non-gov systems without authorization
+  - If you're not sure you should be here, STOP and ask
+
+    /\\_/\\
+   ( -_- )  <  Seriously though. Don't mess around in here.
+    > ^ <
+
+  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)
+================================================================================
+""".format(region=self.region, account=self.account_id)
+        print(warning, file=sys.stderr)
+
+        # Pause for confirmation if a human is at the terminal
+        if sys.stdin.isatty():
+            try:
+                input("  Press ENTER to continue (or Ctrl+C to abort)... ")
+            except KeyboardInterrupt:
+                print("\n\nAborted.", file=sys.stderr)
+                sys.exit(0)
 
     def _get_account_id(self) -> str:
         try:
-            return self.sts.get_caller_identity()["Account"]
+            return self.session.client("sts").get_caller_identity()["Account"]
         except ClientError as e:
             print(f"ERROR: Cannot get account identity: {e}", file=sys.stderr)
             sys.exit(1)
@@ -99,7 +208,8 @@ class IAMScanner:
             try:
                 self.iam.generate_credential_report()
                 resp = self.iam.get_credential_report()
-                content = base64.b64decode(resp["Content"]).decode("utf-8", errors="replace")
+                raw = resp["Content"]
+                content = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
                 reader = csv.DictReader(io.StringIO(content))
                 return list(reader)
             except ClientError as e:
@@ -362,6 +472,8 @@ def main():
 
     result = {
         "account_id": scanner.account_id,
+        "region": scanner.region,
+        "is_govcloud": scanner.is_govcloud,
         "scan_time": datetime.now(timezone.utc).isoformat(),
         "profile": args.profile,
         "total_findings": len(findings),
