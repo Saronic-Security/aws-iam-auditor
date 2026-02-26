@@ -36,7 +36,7 @@ aws configure sso --profile <your-profile>
 aws configure --profile <your-profile>
 ```
 
-You only need **read-only access**:
+You only need **read-only IAM access**:
 - `iam:GenerateCredentialReport`
 - `iam:GetCredentialReport`
 - `iam:GetAccountPasswordPolicy`
@@ -45,10 +45,6 @@ You only need **read-only access**:
 - `iam:ListAttachedUserPolicies`
 - `iam:ListRoles`
 - `sts:GetCallerIdentity`
-- `cloudtrail:DescribeTrails`
-- `access-analyzer:ListAnalyzers`
-- `guardduty:ListDetectors`
-- `s3:GetAccountPublicAccessBlock`
 
 ### 4. Run the audit
 Open Claude Code in this directory and say:
@@ -90,10 +86,6 @@ That's it. Claude handles everything:
 | 12 | Unused IAM roles (>90 days) | MEDIUM | IAM API |
 | 13 | Password policy non-compliance | HIGH | IAM API |
 | 14 | Wildcard trust policies (Principal: *) | CRITICAL/HIGH | IAM API |
-| 15 | No CloudTrail trails configured | CRITICAL | CloudTrail API |
-| 16 | IAM Access Analyzer not enabled | HIGH | Access Analyzer API |
-| 17 | GuardDuty not enabled | HIGH | GuardDuty API |
-| 18 | S3 public access block not enabled | HIGH | S3 Control API |
 
 Every finding is enriched with:
 - CIS AWS Foundations Benchmark reference

@@ -288,10 +288,6 @@ class IAMScanner:
         self._check_user_policies()
         self._check_unused_roles()
         self._check_wildcard_trust_policies()
-        self._check_cloudtrail()
-        self._check_access_analyzer()
-        self._check_guardduty()
-        self._check_s3_public_access_block()
 
         if self.findings:
             crit = sum(1 for f in self.findings if f["severity"] == "CRITICAL")
@@ -597,91 +593,6 @@ class IAMScanner:
                         ))
                         break  # One finding per role
 
-    # --- NEW: CloudTrail ---
-
-    def _check_cloudtrail(self):
-        """Check if at least one CloudTrail trail is configured."""
-        log("  [+] Checking CloudTrail...", "dim")
-        try:
-            ct = self.session.client("cloudtrail", region_name=self.region)
-            trails = ct.describe_trails().get("trailList", [])
-            if not trails:
-                self.findings.append(finding(
-                    "no_cloudtrail", "CRITICAL",
-                    f"arn:aws:cloudtrail:{self.region}:{self.account_id}:trail",
-                    "No CloudTrail trails are configured. There is NO audit logging for this account.",
-                ))
-        except ClientError as e:
-            log(f"  [!] Could not check CloudTrail: {e}", "warning")
-
-    # --- NEW: IAM Access Analyzer ---
-
-    def _check_access_analyzer(self):
-        """Check if IAM Access Analyzer is enabled in the region."""
-        log("  [+] Checking IAM Access Analyzer...", "dim")
-        try:
-            aa = self.session.client("accessanalyzer", region_name=self.region)
-            analyzers = aa.list_analyzers(type="ACCOUNT").get("analyzers", [])
-            if not analyzers:
-                self.findings.append(finding(
-                    "no_access_analyzer", "HIGH",
-                    f"arn:aws:access-analyzer:{self.region}:{self.account_id}:analyzer",
-                    f"IAM Access Analyzer is not enabled in {self.region}. External access to resources will not be detected.",
-                ))
-        except ClientError as e:
-            log(f"  [!] Could not check Access Analyzer: {e}", "warning")
-
-    # --- NEW: GuardDuty ---
-
-    def _check_guardduty(self):
-        """Check if GuardDuty is enabled."""
-        log("  [+] Checking GuardDuty...", "dim")
-        try:
-            gd = self.session.client("guardduty", region_name=self.region)
-            detectors = gd.list_detectors().get("DetectorIds", [])
-            if not detectors:
-                self.findings.append(finding(
-                    "no_guardduty", "HIGH",
-                    f"arn:aws:guardduty:{self.region}:{self.account_id}:detector",
-                    f"GuardDuty is not enabled in {self.region}. Threat detection is not active.",
-                ))
-        except ClientError as e:
-            log(f"  [!] Could not check GuardDuty: {e}", "warning")
-
-    # --- NEW: S3 Public Access Block ---
-
-    def _check_s3_public_access_block(self):
-        """Check if account-level S3 public access block is enabled."""
-        log("  [+] Checking S3 public access block...", "dim")
-        try:
-            s3control = self.session.client("s3control", region_name=self.region)
-            config = s3control.get_public_access_block(AccountId=self.account_id)
-            pab = config.get("PublicAccessBlockConfiguration", {})
-            issues = []
-            if not pab.get("BlockPublicAcls", False):
-                issues.append("BlockPublicAcls is OFF")
-            if not pab.get("IgnorePublicAcls", False):
-                issues.append("IgnorePublicAcls is OFF")
-            if not pab.get("BlockPublicPolicy", False):
-                issues.append("BlockPublicPolicy is OFF")
-            if not pab.get("RestrictPublicBuckets", False):
-                issues.append("RestrictPublicBuckets is OFF")
-            if issues:
-                self.findings.append(finding(
-                    "s3_public_access", "HIGH",
-                    f"arn:aws:s3:::{self.account_id}",
-                    f"Account-level S3 public access block is not fully enabled: {'; '.join(issues)}",
-                    {"config": pab, "issues": issues},
-                ))
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchPublicAccessBlockConfiguration":
-                self.findings.append(finding(
-                    "s3_public_access", "HIGH",
-                    f"arn:aws:s3:::{self.account_id}",
-                    "No account-level S3 public access block is configured. Buckets can be made public.",
-                ))
-            else:
-                log(f"  [!] Could not check S3 public access block: {e}", "warning")
 
 
 def main():

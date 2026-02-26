@@ -43,83 +43,25 @@ Before presenting findings, critically review them for false positives:
 - **Stale access keys**: Is the key actually in use (check `last_used` data)? A key rotated 91 days ago is different from one rotated 365 days ago.
 - **Service accounts**: Users with names like `svc-*`, `ci-*`, `automation-*` may legitimately lack console access or MFA.
 - **Wildcard trust policies**: Roles with `Principal: *` AND a Condition clause may be intentional (e.g., cross-account with `aws:PrincipalOrgID`). Review the condition before flagging CRITICAL.
-- **CloudTrail/GuardDuty/Access Analyzer**: If missing, these are almost never false positives — but verify the account isn't managed by an org-level trail or delegated admin.
-- **S3 public access block**: Some accounts intentionally host public content. Check if this is a known exception before flagging.
 - **Multiple active keys**: Could be mid-rotation. Check if both keys are actively used or if one is stale.
 - Adjust severity if warranted and note your reasoning.
 
 ### Step 4: Present Report
-Present findings in this exact format. Keep it tight, scannable, and professional.
+Present findings in this exact format. Keep it tight, scannable, and professional. No emoji. One single table with all findings. Use **bold** for CRITICAL severity text.
 
 ```
-# IAM Hygiene Audit
+# IAM Hygiene Audit — <account-id> <(GovCloud) if applicable>
+> Scanned <timestamp> | Intel v<version> | <duration> | Stale: <days>d
+> GovCloud — severities escalated, NIST 800-171/CMMC refs included (only if GovCloud)
 
-| Field | Value |
-|-------|-------|
-| Account | <account-id> |
-| Region | <region> |
-| GovCloud | Yes/No |
-| Scanned | <timestamp> |
-| Intel | v<version> (<date>) |
+**X CRITICAL** | **X HIGH** | X MEDIUM | X LOW — X priv esc, X data leak
 
 ---
 
-## Risk Overview
-
-| | Count | Priv Esc | Data Leak |
-|---|---|---|---|
-| CRITICAL | X | X | X |
-| HIGH | X | X | X |
-| MEDIUM | X | X | X |
-| LOW | X | X | X |
-
----
-
-## CRITICAL
-
-### <Finding title>
-> <One-line threat summary from risk_context>
-
-| | |
-|---|---|
-| Resource | `<short resource name>` |
-| CIS | <control number> |
-| ATT&CK | <MITRE IDs> |
-| Risks | <flags: Priv Esc / Data Leak / Lateral Movement / Initial Access> |
-
-**What happened in the wild**: <1-2 sentence real incident reference from risk_context>
-
-**Fix**:
-1. <step>
-2. <step>
-3. <step>
-
-**Validation**: <false positive assessment — keep to 1 sentence>
-
----
-
-## HIGH
-
-[same format per finding]
-
----
-
-## MEDIUM
-
-For MEDIUM findings, use a compact table instead of individual sections:
-
-| # | Finding | Resource | Risks | Fix |
-|---|---------|----------|-------|-----|
-| 1 | <title> | `<short name>` | Priv Esc, Lateral | <1-line fix> |
-| 2 | ... | ... | ... | ... |
-
-Then add a single "Validation Notes" paragraph covering all MEDIUM findings.
-
----
-
-## LOW
-
-Same compact table as MEDIUM.
+| # | Severity | Finding | Resource | Risks | Fix | In the Wild | Validation |
+|---|----------|---------|----------|-------|-----|-------------|------------|
+| 1 | **CRITICAL** | <title> | `<short name>` | <risk flags> | <1-line fix> | <1-sentence incident> | <1-sentence FP assessment> |
+| 2 | HIGH | ... | ... | ... | ... | ... | ... |
 ```
 
 ### Step 5: Wait for Approval

@@ -10,11 +10,14 @@
     "data_leakage": true,
     "lateral_movement": true,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1552.001"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1552.001"
+    ],
     "real_incidents": [
-      "Code Spaces 2014 — company destroyed via root key compromise",
-      "Chegg 2018 — 40M user records exfiltrated via shared root credential",
-      "Cryptojacking campaigns 2022-2024 — root keys used to spin up mining instances"
+      "Code Spaces 2014 \u2014 company destroyed via root key compromise",
+      "Chegg 2018 \u2014 40M user records exfiltrated via shared root credential",
+      "Cryptojacking campaigns 2022-2024 \u2014 root keys used to spin up mining instances"
     ],
     "threat_summary": "Root access keys provide unrestricted account access that cannot be limited by SCPs or permission boundaries. Leaked root keys are the #1 entry point in AWS CIRT-investigated incidents."
   },
@@ -24,7 +27,11 @@
     "data_leakage": true,
     "lateral_movement": true,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1110.004", "T1621"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1110.004",
+      "T1621"
+    ],
     "real_incidents": [
       "Scattered Spider/LUCR-3 identity campaigns 2023-2024",
       "AWS Console rate-limit bypass enabling ~280 password attempts/min (Datadog 2024)"
@@ -37,11 +44,14 @@
     "data_leakage": true,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1110.004"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1110.004"
+    ],
     "real_incidents": [
-      "Sisense 2024 — terabytes exfiltrated via MFA-less IAM user",
-      "LastPass 2022 — vault decryption keys stolen via compromised developer",
-      "Large-scale AWS credential theft campaign Dec 2024 — attackers targeted MFA-less users to create admin accounts"
+      "Sisense 2024 \u2014 terabytes exfiltrated via MFA-less IAM user",
+      "LastPass 2022 \u2014 vault decryption keys stolen via compromised developer",
+      "Large-scale AWS credential theft campaign Dec 2024 \u2014 attackers targeted MFA-less users to create admin accounts"
     ],
     "threat_summary": "Console users without MFA are vulnerable to credential stuffing and phishing. In the Dec 2024 large-scale breach, attackers specifically targeted MFA-less IAM users to create additional admin accounts."
   },
@@ -51,10 +61,14 @@
     "data_leakage": true,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1552.001", "T1078.004", "T1528"],
+    "mitre_attack": [
+      "T1552.001",
+      "T1078.004",
+      "T1528"
+    ],
     "real_incidents": [
-      "Uber 2016 — 57M records exfiltrated via unrotated keys in GitHub repo",
-      "Codecov supply chain attack 2021 — keys harvested from CI for 2 months",
+      "Uber 2016 \u2014 57M records exfiltrated via unrotated keys in GitHub repo",
+      "Codecov supply chain attack 2021 \u2014 keys harvested from CI for 2 months",
       "AWS CIRT: long-term credentials are the #1 initial access vector"
     ],
     "threat_summary": "Long-lived access keys are the top initial access vector per AWS CIRT. Supply chain attacks (Codecov) and repo leaks (Uber) specifically target unrotated keys. Longer lifetime = longer compromise window."
@@ -65,10 +79,13 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1552.001"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1552.001"
+    ],
     "real_incidents": [
-      "Twitch 2021 — 6000+ repos with exposed credentials including unused keys",
-      "Postman workspace credential exposures — unused test keys with active permissions"
+      "Twitch 2021 \u2014 6000+ repos with exposed credentials including unused keys",
+      "Postman workspace credential exposures \u2014 unused test keys with active permissions"
     ],
     "threat_summary": "Active but never-used keys are forgotten credentials with no usage baseline. GuardDuty and CloudTrail anomaly detection cannot alert on first use by an attacker because there is no normal behavior to compare against."
   },
@@ -78,7 +95,10 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1110.004"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1110.004"
+    ],
     "real_incidents": [
       "IBM 2023 report: 16% of cloud breaches stem from orphaned/dormant IAM accounts"
     ],
@@ -90,7 +110,9 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1110.004"],
+    "mitre_attack": [
+      "T1110.004"
+    ],
     "real_incidents": [
       "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
     ],
@@ -102,9 +124,12 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": false,
-    "mitre_attack": ["T1098", "T1078.004"],
+    "mitre_attack": [
+      "T1098",
+      "T1078.004"
+    ],
     "real_incidents": [
-      "Sysdig 2026 — AI-assisted 8-minute admin escalation via iam:AttachUserPolicy"
+      "Sysdig 2026 \u2014 AI-assisted 8-minute admin escalation via iam:AttachUserPolicy"
     ],
     "threat_summary": "Direct user policy attachment creates per-user attack surfaces. Rhino Security's iam:AttachUserPolicy and iam:PutUserPolicy escalation methods specifically target users with direct policies. Group/role-based policies centralize control and are auditable."
   },
@@ -114,9 +139,11 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": false,
-    "mitre_attack": ["T1098"],
+    "mitre_attack": [
+      "T1098"
+    ],
     "real_incidents": [
-      "Rhino Security iam:PutUserPolicy — one of 21 documented IAM privilege escalation methods"
+      "Rhino Security iam:PutUserPolicy \u2014 one of 21 documented IAM privilege escalation methods"
     ],
     "threat_summary": "Inline policies are invisible in the IAM Policy console, creating shadow permissions. The iam:PutUserPolicy escalation method exploits the expectation that inline policies on users are common and unmonitored."
   },
@@ -126,12 +153,16 @@
     "data_leakage": true,
     "lateral_movement": true,
     "initial_access": false,
-    "mitre_attack": ["T1078.004", "T1098.001", "T1136.003"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1098.001",
+      "T1136.003"
+    ],
     "real_incidents": [
-      "Capital One 2019 — 100M records, root cause was overprivileged role",
-      "Sysdig 2026 — attacker created backdoor-admin with AdministratorAccess in 8 minutes",
-      "Unit 42 — thousands of compromised workloads from misconfigured admin roles",
-      "Dec 2024 large-scale breach — admin keys called 'a jackpot for criminals'"
+      "Capital One 2019 \u2014 100M records, root cause was overprivileged role",
+      "Sysdig 2026 \u2014 attacker created backdoor-admin with AdministratorAccess in 8 minutes",
+      "Unit 42 \u2014 thousands of compromised workloads from misconfigured admin roles",
+      "Dec 2024 large-scale breach \u2014 admin keys called 'a jackpot for criminals'"
     ],
     "threat_summary": "Overprivileged users are the terminal escalation target. Capital One's breach root cause was an overprivileged role, not SSRF. In the 2026 Sysdig case, attackers created a backdoor-admin user with AdministratorAccess in 8 minutes."
   },
@@ -141,11 +172,15 @@
     "data_leakage": false,
     "lateral_movement": true,
     "initial_access": false,
-    "mitre_attack": ["T1078.004", "T1098", "T1550.001"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1098",
+      "T1550.001"
+    ],
     "real_incidents": [
-      "Aqua Security Shadow Roles — Black Hat 2024, default service roles enable cross-service lateral movement",
-      "Sysdig 2026 — attacker enumerated dormant roles and attempted assumption across accounts",
-      "Token Security 2025 — dormant roles with permissive trust policies are misconfigs hiding in plain sight"
+      "Aqua Security Shadow Roles \u2014 Black Hat 2024, default service roles enable cross-service lateral movement",
+      "Sysdig 2026 \u2014 attacker enumerated dormant roles and attempted assumption across accounts",
+      "Token Security 2025 \u2014 dormant roles with permissive trust policies are misconfigs hiding in plain sight"
     ],
     "threat_summary": "Unused roles with admin policies or permissive trust policies are prime escalation targets. Attackers enumerate dormant roles via iam:ListRoles and attempt assumption. Aqua's Shadow Roles research showed default service roles enable cross-service lateral movement."
   },
@@ -155,7 +190,11 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1110.001", "T1110.003", "T1110.004"],
+    "mitre_attack": [
+      "T1110.001",
+      "T1110.003",
+      "T1110.004"
+    ],
     "real_incidents": [
       "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
     ],
@@ -167,7 +206,11 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1110.001", "T1110.003", "T1110.004"],
+    "mitre_attack": [
+      "T1110.001",
+      "T1110.003",
+      "T1110.004"
+    ],
     "real_incidents": [
       "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
     ],
@@ -179,11 +222,15 @@
     "data_leakage": true,
     "lateral_movement": true,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1098", "T1550.001"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1098",
+      "T1550.001"
+    ],
     "real_incidents": [
-      "Aqua Security Shadow Roles — Black Hat 2024, wildcard trust policies allow unauthenticated role assumption",
-      "Rhino Security confused deputy attacks — roles with Principal:* exploited cross-account",
-      "Unit 42 2025 — misconfigured trust policies in 35% of cloud incidents"
+      "Aqua Security Shadow Roles \u2014 Black Hat 2024, wildcard trust policies allow unauthenticated role assumption",
+      "Rhino Security confused deputy attacks \u2014 roles with Principal:* exploited cross-account",
+      "Unit 42 2025 \u2014 misconfigured trust policies in 35% of cloud incidents"
     ],
     "threat_summary": "Roles with Principal:* in trust policies can be assumed by ANY AWS principal. Without a Condition clause, this means any account on earth. Even with conditions, overly broad trust is a top escalation vector in cross-account attacks."
   },
@@ -193,10 +240,13 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1552.001"],
+    "mitre_attack": [
+      "T1078.004",
+      "T1552.001"
+    ],
     "real_incidents": [
       "AWS CIRT: multiple active keys often indicate one is forgotten and unmonitored",
-      "Codecov 2021 — harvested secondary keys that were not being rotated"
+      "Codecov 2021 \u2014 harvested secondary keys that were not being rotated"
     ],
     "threat_summary": "Users with two active access keys typically have one forgotten key that is not being rotated or monitored. This doubles the attack surface and the window for credential compromise."
   },
@@ -206,10 +256,12 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": false,
-    "mitre_attack": ["T1562.008"],
+    "mitre_attack": [
+      "T1562.008"
+    ],
     "real_incidents": [
-      "Capital One 2019 — CloudTrail was the primary source for forensics and timeline reconstruction",
-      "Multiple AWS CIRT cases — accounts without CloudTrail have no forensic evidence after compromise"
+      "Capital One 2019 \u2014 CloudTrail was the primary source for forensics and timeline reconstruction",
+      "Multiple AWS CIRT cases \u2014 accounts without CloudTrail have no forensic evidence after compromise"
     ],
     "threat_summary": "Without CloudTrail, there is ZERO audit logging for API activity. Attackers can operate undetected indefinitely. Incident response is impossible without API call history. This is the single most critical detective control in AWS."
   },
@@ -219,12 +271,15 @@
     "data_leakage": true,
     "lateral_movement": false,
     "initial_access": true,
-    "mitre_attack": ["T1078.004", "T1530"],
-    "real_incidents": [
-      "Capital One 2019 — overpermissive role trust policy went undetected for months",
-      "Multiple S3 breaches 2018-2024 — public bucket policies not flagged until data exfiltrated"
+    "mitre_attack": [
+      "T1078.004",
+      "T1530"
     ],
-    "threat_summary": "IAM Access Analyzer detects resources shared with external principals — S3 buckets, IAM roles, KMS keys, Lambda functions, SQS queues. Without it, external access misconfigurations go undetected until exploitation."
+    "real_incidents": [
+      "Capital One 2019 \u2014 overpermissive role trust policy went undetected for months",
+      "Multiple S3 breaches 2018-2024 \u2014 public bucket policies not flagged until data exfiltrated"
+    ],
+    "threat_summary": "IAM Access Analyzer detects resources shared with external principals \u2014 S3 buckets, IAM roles, KMS keys, Lambda functions, SQS queues. Without it, external access misconfigurations go undetected until exploitation."
   },
   "no_guardduty": {
     "cis_control": "4.15 (related)",
@@ -232,10 +287,12 @@
     "data_leakage": false,
     "lateral_movement": false,
     "initial_access": false,
-    "mitre_attack": ["T1562.008"],
+    "mitre_attack": [
+      "T1562.008"
+    ],
     "real_incidents": [
-      "AWS re:Inforce 2024 — GuardDuty detected cryptojacking within minutes vs. months without it",
-      "Sysdig 2026 — GuardDuty flagged anomalous IAM activity during 8-minute compromise"
+      "AWS re:Inforce 2024 \u2014 GuardDuty detected cryptojacking within minutes vs. months without it",
+      "Sysdig 2026 \u2014 GuardDuty flagged anomalous IAM activity during 8-minute compromise"
     ],
     "threat_summary": "GuardDuty is AWS's built-in threat detection for CloudTrail, VPC Flow Logs, and DNS logs. Without it, reconnaissance, credential compromise, and crypto-mining go undetected. It is the primary runtime threat detection service."
   },
@@ -245,11 +302,13 @@
     "data_leakage": true,
     "lateral_movement": false,
     "initial_access": false,
-    "mitre_attack": ["T1530"],
+    "mitre_attack": [
+      "T1530"
+    ],
     "real_incidents": [
-      "Twitch 2021 — publicly accessible S3 bucket exposed 6000+ repos",
-      "US DoD 2017 — 1.8 billion social media posts exposed via public S3 bucket",
-      "Multiple breaches 2018-2024 — S3 public access is consistently a top-10 cloud misconfiguration"
+      "Twitch 2021 \u2014 publicly accessible S3 bucket exposed 6000+ repos",
+      "US DoD 2017 \u2014 1.8 billion social media posts exposed via public S3 bucket",
+      "Multiple breaches 2018-2024 \u2014 S3 public access is consistently a top-10 cloud misconfiguration"
     ],
     "threat_summary": "Without account-level S3 public access block, any IAM user or role with s3:PutBucketPolicy can make buckets publicly accessible. The account-level block is a safety net that prevents accidental data exposure even if bucket policies are misconfigured."
   }
