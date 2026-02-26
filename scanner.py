@@ -332,7 +332,7 @@ class IAMScanner:
                 reader = csv.DictReader(io.StringIO(content))
                 return list(reader)
             except ClientError as e:
-                if e.response["Error"]["Code"] == "ReportNotReady":
+                if e.response["Error"]["Code"] in ("ReportNotReady", "ReportInProgress"):
                     time.sleep(2)
                     continue
                 raise

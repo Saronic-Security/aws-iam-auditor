@@ -46,8 +46,15 @@ Before presenting findings, critically review them for false positives:
 - **Multiple active keys**: Could be mid-rotation. Check if both keys are actively used or if one is stale.
 - Adjust severity if warranted and note your reasoning.
 
-### Step 4: Present Report
-Present findings in this exact format. Keep it tight, scannable, and professional. No emoji. One single table with all findings. Use **bold** for CRITICAL severity text.
+### Step 4: Check Linear for Existing Tickets
+Before presenting the report, search Linear for existing `[IAM-AUDIT]` tickets matching the account ID:
+1. Search: `list_issues` with query `[IAM-AUDIT] <account-id>` in the Security Engineering team
+2. For each finding, match against existing tickets by check name + resource
+3. If a ticket exists, record its identifier (e.g., `SECURE-186`)
+4. If no ticket exists, mark as `—` (new finding)
+
+### Step 5: Present Report
+Present findings in this exact format. Keep it tight, scannable, and professional. No emoji. One single table with all findings. Use **bold** for CRITICAL severity text. The Linear Ticket column shows existing ticket IDs or `—` for new findings.
 
 ```
 # IAM Hygiene Audit — <account-id> <(GovCloud) if applicable>
@@ -58,19 +65,19 @@ Present findings in this exact format. Keep it tight, scannable, and professiona
 
 ---
 
-| # | Severity | Finding | Resource | Risks | Fix | In the Wild | Validation |
-|---|----------|---------|----------|-------|-----|-------------|------------|
-| 1 | **CRITICAL** | <title> | `<short name>` | <risk flags> | <1-line fix> | <1-sentence incident> | <1-sentence FP assessment> |
-| 2 | HIGH | ... | ... | ... | ... | ... | ... |
+| # | Severity | Finding | Resource | Risks | Fix | In the Wild | Validation | Linear Ticket |
+|---|----------|---------|----------|-------|-----|-------------|------------|---------------|
+| 1 | **CRITICAL** | <title> | `<short name>` | <risk flags> | <1-line fix> | <1-sentence incident> | <1-sentence FP assessment> | SECURE-XXX or — |
+| 2 | HIGH | ... | ... | ... | ... | ... | ... | ... |
 ```
 
-### Step 5: Wait for Approval
+### Step 6: Wait for Approval
 After presenting the report, ask the user:
 > "Would you like me to create Linear tickets for these findings? I'll create one ticket per CRITICAL/HIGH finding, and a grouped ticket for MEDIUM/LOW findings."
 
 **Do NOT create tickets until the user explicitly approves.**
 
-### Step 6: Create Linear Tickets
+### Step 7: Create Linear Tickets
 When approved, create tickets in the **Security Engineering** team under the **AWS IAM Hygiene** project.
 
 **Deduplication**: Before creating any ticket, search for existing issues in Linear with the same `[IAM-AUDIT]` prefix and account ID. If a ticket already exists for the same check + resource combination, **skip it** and note "already tracked as SECURE-XXX" in the summary. Only create tickets for new findings.
