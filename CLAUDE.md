@@ -45,39 +45,77 @@ Before presenting findings, critically review them for false positives:
 - Adjust severity if warranted and note your reasoning.
 
 ### Step 4: Present Report
-Present findings to the user in this format:
+Present findings in this exact format. Keep it tight, scannable, and professional.
 
 ```
-## IAM Hygiene Audit — Account <ACCOUNT_ID>
-**Scanned**: <timestamp>
-**Profile**: <profile>
-**Region**: <region>
-**GovCloud**: Yes/No
+# IAM Hygiene Audit
 
-### Summary
-| Severity | Count |
-|----------|-------|
-| CRITICAL | X     |
-| HIGH     | X     |
-| MEDIUM   | X     |
-| LOW      | X     |
+| Field | Value |
+|-------|-------|
+| Account | <account-id> |
+| Region | <region> |
+| GovCloud | Yes/No |
+| Scanned | <timestamp> |
+| Intel | v<version> (<date>) |
 
-### CRITICAL Findings
-#### [Finding title]
-- **Resource**: <ARN>
-- **Detail**: <what's wrong>
-- **Remediation**: <specific steps>
-- **CIS Reference**: <section>
-- **Validation Notes**: <any caveats from adversarial review>
+---
 
-### HIGH Findings
-[same format]
+## Risk Overview
 
-### MEDIUM Findings
-[same format, can be more condensed]
+| | Count | Priv Esc | Data Leak |
+|---|---|---|---|
+| CRITICAL | X | X | X |
+| HIGH | X | X | X |
+| MEDIUM | X | X | X |
+| LOW | X | X | X |
 
-### LOW Findings
-[same format, can be a summary table]
+---
+
+## CRITICAL
+
+### <Finding title>
+> <One-line threat summary from risk_context>
+
+| | |
+|---|---|
+| Resource | `<short resource name>` |
+| CIS | <control number> |
+| ATT&CK | <MITRE IDs> |
+| Risks | <flags: Priv Esc / Data Leak / Lateral Movement / Initial Access> |
+
+**What happened in the wild**: <1-2 sentence real incident reference from risk_context>
+
+**Fix**:
+1. <step>
+2. <step>
+3. <step>
+
+**Validation**: <false positive assessment — keep to 1 sentence>
+
+---
+
+## HIGH
+
+[same format per finding]
+
+---
+
+## MEDIUM
+
+For MEDIUM findings, use a compact table instead of individual sections:
+
+| # | Finding | Resource | Risks | Fix |
+|---|---------|----------|-------|-----|
+| 1 | <title> | `<short name>` | Priv Esc, Lateral | <1-line fix> |
+| 2 | ... | ... | ... | ... |
+
+Then add a single "Validation Notes" paragraph covering all MEDIUM findings.
+
+---
+
+## LOW
+
+Same compact table as MEDIUM.
 ```
 
 ### Step 5: Wait for Approval
@@ -87,7 +125,9 @@ After presenting the report, ask the user:
 **Do NOT create tickets until the user explicitly approves.**
 
 ### Step 6: Create Linear Tickets
-When approved, create tickets in the **Security Engineering** team:
+When approved, create tickets in the **Security Engineering** team under the **AWS IAM Hygiene** project.
+
+**Deduplication**: Before creating any ticket, search for existing issues in Linear with the same `[IAM-AUDIT]` prefix and account ID. If a ticket already exists for the same check + resource combination, **skip it** and note "already tracked as SECURE-XXX" in the summary. Only create tickets for new findings.
 
 For each CRITICAL or HIGH finding, create an individual ticket:
 - **Title**: `[IAM-AUDIT] <check name> — <resource short name>`
