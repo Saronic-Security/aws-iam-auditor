@@ -172,5 +172,85 @@
       "AWS Console rate-limit bypass enabling ~280 attempts/min (Datadog 2024)"
     ],
     "threat_summary": "Weak password policies make brute-force and credential stuffing feasible. Without reuse prevention, previously breached passwords remain valid."
+  },
+  "wildcard_trust_policy": {
+    "cis_control": "1.16 (related)",
+    "priv_escalation": true,
+    "data_leakage": true,
+    "lateral_movement": true,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1098", "T1550.001"],
+    "real_incidents": [
+      "Aqua Security Shadow Roles — Black Hat 2024, wildcard trust policies allow unauthenticated role assumption",
+      "Rhino Security confused deputy attacks — roles with Principal:* exploited cross-account",
+      "Unit 42 2025 — misconfigured trust policies in 35% of cloud incidents"
+    ],
+    "threat_summary": "Roles with Principal:* in trust policies can be assumed by ANY AWS principal. Without a Condition clause, this means any account on earth. Even with conditions, overly broad trust is a top escalation vector in cross-account attacks."
+  },
+  "multiple_active_keys": {
+    "cis_control": "1.13",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1552.001"],
+    "real_incidents": [
+      "AWS CIRT: multiple active keys often indicate one is forgotten and unmonitored",
+      "Codecov 2021 — harvested secondary keys that were not being rotated"
+    ],
+    "threat_summary": "Users with two active access keys typically have one forgotten key that is not being rotated or monitored. This doubles the attack surface and the window for credential compromise."
+  },
+  "no_cloudtrail": {
+    "cis_control": "3.1",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": false,
+    "mitre_attack": ["T1562.008"],
+    "real_incidents": [
+      "Capital One 2019 — CloudTrail was the primary source for forensics and timeline reconstruction",
+      "Multiple AWS CIRT cases — accounts without CloudTrail have no forensic evidence after compromise"
+    ],
+    "threat_summary": "Without CloudTrail, there is ZERO audit logging for API activity. Attackers can operate undetected indefinitely. Incident response is impossible without API call history. This is the single most critical detective control in AWS."
+  },
+  "no_access_analyzer": {
+    "cis_control": "1.20 (related)",
+    "priv_escalation": false,
+    "data_leakage": true,
+    "lateral_movement": false,
+    "initial_access": true,
+    "mitre_attack": ["T1078.004", "T1530"],
+    "real_incidents": [
+      "Capital One 2019 — overpermissive role trust policy went undetected for months",
+      "Multiple S3 breaches 2018-2024 — public bucket policies not flagged until data exfiltrated"
+    ],
+    "threat_summary": "IAM Access Analyzer detects resources shared with external principals — S3 buckets, IAM roles, KMS keys, Lambda functions, SQS queues. Without it, external access misconfigurations go undetected until exploitation."
+  },
+  "no_guardduty": {
+    "cis_control": "4.15 (related)",
+    "priv_escalation": false,
+    "data_leakage": false,
+    "lateral_movement": false,
+    "initial_access": false,
+    "mitre_attack": ["T1562.008"],
+    "real_incidents": [
+      "AWS re:Inforce 2024 — GuardDuty detected cryptojacking within minutes vs. months without it",
+      "Sysdig 2026 — GuardDuty flagged anomalous IAM activity during 8-minute compromise"
+    ],
+    "threat_summary": "GuardDuty is AWS's built-in threat detection for CloudTrail, VPC Flow Logs, and DNS logs. Without it, reconnaissance, credential compromise, and crypto-mining go undetected. It is the primary runtime threat detection service."
+  },
+  "s3_public_access": {
+    "cis_control": "2.1.4",
+    "priv_escalation": false,
+    "data_leakage": true,
+    "lateral_movement": false,
+    "initial_access": false,
+    "mitre_attack": ["T1530"],
+    "real_incidents": [
+      "Twitch 2021 — publicly accessible S3 bucket exposed 6000+ repos",
+      "US DoD 2017 — 1.8 billion social media posts exposed via public S3 bucket",
+      "Multiple breaches 2018-2024 — S3 public access is consistently a top-10 cloud misconfiguration"
+    ],
+    "threat_summary": "Without account-level S3 public access block, any IAM user or role with s3:PutBucketPolicy can make buckets publicly accessible. The account-level block is a safety net that prevents accidental data exposure even if bucket policies are misconfigured."
   }
 }

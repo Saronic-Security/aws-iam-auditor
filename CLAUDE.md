@@ -42,6 +42,10 @@ Before presenting findings, critically review them for false positives:
 - **Unused roles**: Could this be a role used by a monthly/quarterly job? Flag it as "potentially valid" rather than removing it.
 - **Stale access keys**: Is the key actually in use (check `last_used` data)? A key rotated 91 days ago is different from one rotated 365 days ago.
 - **Service accounts**: Users with names like `svc-*`, `ci-*`, `automation-*` may legitimately lack console access or MFA.
+- **Wildcard trust policies**: Roles with `Principal: *` AND a Condition clause may be intentional (e.g., cross-account with `aws:PrincipalOrgID`). Review the condition before flagging CRITICAL.
+- **CloudTrail/GuardDuty/Access Analyzer**: If missing, these are almost never false positives — but verify the account isn't managed by an org-level trail or delegated admin.
+- **S3 public access block**: Some accounts intentionally host public content. Check if this is a known exception before flagging.
+- **Multiple active keys**: Could be mid-rotation. Check if both keys are actively used or if one is stale.
 - Adjust severity if warranted and note your reasoning.
 
 ### Step 4: Present Report

@@ -7,6 +7,7 @@ All operations are read-only (list/get/generate-credential-report).
 Usage:
     python scanner.py --profile <aws-profile-name>
     python scanner.py --profile <aws-profile-name> --output findings.json
+    python scanner.py --profile <aws-profile-name> --days 60 --update-intel
 """
 
 import argparse
@@ -14,21 +15,19 @@ import base64
 import csv
 import io
 import json
-import sys
-import time
-from datetime import datetime, timezone
-from typing import Any
-
 import os
 import subprocess
+import sys
+import time
 import urllib.request
+from datetime import datetime, timezone
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound, UnauthorizedSSOTokenError
 
 
 # --- Constants ---
-STALE_DAYS = 90
 GOVCLOUD_REGIONS = {"us-gov-west-1", "us-gov-east-1"}
 OVERPRIVILEGED_POLICIES = {
     "arn:aws:iam::aws:policy/AdministratorAccess",
@@ -38,6 +37,47 @@ OVERPRIVILEGED_POLICIES = {
 CIS_MIN_PASSWORD_LENGTH = 14
 RISK_INTEL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "risk_intel.json")
 RISK_INTEL_URL = "https://raw.githubusercontent.com/Saronic-Security/aws-iam-auditor/master/risk_intel.json"
+
+
+# --- ANSI Colors ---
+class C:
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    GREEN = "\033[92m"
+    CYAN = "\033[96m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+
+    @staticmethod
+    def enabled():
+        return sys.stderr.isatty()
+
+    @classmethod
+    def red(cls, s): return f"{cls.RED}{s}{cls.RESET}" if cls.enabled() else s
+    @classmethod
+    def yellow(cls, s): return f"{cls.YELLOW}{s}{cls.RESET}" if cls.enabled() else s
+    @classmethod
+    def green(cls, s): return f"{cls.GREEN}{s}{cls.RESET}" if cls.enabled() else s
+    @classmethod
+    def cyan(cls, s): return f"{cls.CYAN}{s}{cls.RESET}" if cls.enabled() else s
+    @classmethod
+    def bold(cls, s): return f"{cls.BOLD}{s}{cls.RESET}" if cls.enabled() else s
+    @classmethod
+    def dim(cls, s): return f"{cls.DIM}{s}{cls.RESET}" if cls.enabled() else s
+
+
+def log(msg: str, level: str = "info"):
+    colors = {
+        "critical": C.red,
+        "high": C.red,
+        "warning": C.yellow,
+        "success": C.green,
+        "info": C.cyan,
+        "dim": C.dim,
+    }
+    fn = colors.get(level, C.cyan)
+    print(fn(msg), file=sys.stderr)
 
 
 def days_since(date_str: str) -> int | None:
@@ -65,7 +105,7 @@ def finding(check: str, severity: str, resource: str, detail: str, data: dict | 
 def load_risk_intel(update: bool = False) -> dict:
     """Load risk intelligence data. Optionally fetch latest from GitHub first."""
     if update:
-        print("[*] Fetching latest risk intelligence...", file=sys.stderr)
+        log("[*] Fetching latest risk intelligence...")
         try:
             req = urllib.request.Request(RISK_INTEL_URL, headers={"User-Agent": "aws-iam-auditor/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -79,20 +119,20 @@ def load_risk_intel(update: bool = False) -> dict:
             if remote_ver >= local_ver:
                 with open(RISK_INTEL_FILE, "w", encoding="utf-8") as f:
                     json.dump(remote_data, f, indent=2)
-                print(f"  [+] Risk intel updated to v{remote_ver} ({remote_data['_metadata']['last_updated']})", file=sys.stderr)
+                log(f"  [+] Risk intel updated to v{remote_ver} ({remote_data['_metadata']['last_updated']})", "success")
             else:
-                print(f"  [+] Local risk intel v{local_ver} is already current", file=sys.stderr)
+                log(f"  [+] Local risk intel v{local_ver} is already current", "success")
         except Exception as e:
-            print(f"  [!] Could not fetch remote intel ({e}), using local copy", file=sys.stderr)
+            log(f"  [!] Could not fetch remote intel ({e}), using local copy", "warning")
 
     if os.path.exists(RISK_INTEL_FILE):
         with open(RISK_INTEL_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         meta = data.get("_metadata", {})
-        print(f"[*] Risk intel loaded: v{meta.get('version', '?')} ({meta.get('last_updated', 'unknown')})", file=sys.stderr)
+        log(f"[*] Risk intel loaded: v{meta.get('version', '?')} ({meta.get('last_updated', 'unknown')})")
         return data
     else:
-        print("[!] No risk_intel.json found. Findings will not include threat context.", file=sys.stderr)
+        log("[!] No risk_intel.json found. Findings will not include threat context.", "warning")
         return {}
 
 
@@ -115,8 +155,9 @@ def enrich_finding(f: dict, intel: dict) -> dict:
 
 
 class IAMScanner:
-    def __init__(self, profile: str):
+    def __init__(self, profile: str, stale_days: int = 90):
         self.profile = profile
+        self.stale_days = stale_days
         try:
             self.session = boto3.Session(profile_name=profile)
         except ProfileNotFound:
@@ -151,8 +192,6 @@ class IAMScanner:
             error_code = ""
             if hasattr(e, "response"):
                 error_code = e.response.get("Error", {}).get("Code", "")
-            # Detect SSO-related failures: explicit SSO errors, incomplete signatures
-            # from stale tokens, or expired token errors
             is_sso = (
                 "SSO" in error_str
                 or "UnauthorizedSSOTokenError" in type(e).__name__
@@ -161,7 +200,7 @@ class IAMScanner:
             )
 
             if is_sso:
-                print(f"\n[!] SSO session expired for profile '{self.profile}'. Logging in...", file=sys.stderr)
+                log(f"\n[!] SSO session expired for profile '{self.profile}'. Logging in...", "warning")
                 result = subprocess.run(
                     ["aws", "sso", "login", "--profile", self.profile],
                     capture_output=False,
@@ -182,9 +221,7 @@ class IAMScanner:
                     print(f"  To reconfigure this profile:", file=sys.stderr)
                     print(f"    aws configure sso --profile {self.profile}", file=sys.stderr)
                     sys.exit(1)
-                # Recreate session after login
                 self.session = boto3.Session(profile_name=self.profile)
-                # Verify it works now
                 try:
                     self.session.client("sts").get_caller_identity()
                 except Exception as e2:
@@ -198,7 +235,7 @@ class IAMScanner:
                 print(f"  aws configure --profile {self.profile}", file=sys.stderr)
                 sys.exit(1)
 
-        print(f"[*] Authenticated to profile '{self.profile}'", file=sys.stderr)
+        log(f"[*] Authenticated to profile '{self.profile}'", "success")
 
     def _govcloud_warning(self):
         """Print a loud warning when scanning a GovCloud account."""
@@ -228,7 +265,6 @@ class IAMScanner:
 """.format(region=self.region, account=self.account_id)
         print(warning, file=sys.stderr)
 
-        # Pause for confirmation if a human is at the terminal
         if sys.stdin.isatty():
             try:
                 input("  Press ENTER to continue (or Ctrl+C to abort)... ")
@@ -245,21 +281,52 @@ class IAMScanner:
 
     def scan(self) -> list[dict]:
         """Run all checks and return findings."""
-        print(f"[*] Scanning AWS account {self.account_id}...", file=sys.stderr)
+        log(f"[*] Scanning AWS account {C.bold(self.account_id)} (stale threshold: {self.stale_days} days)...")
 
         self._check_credential_report()
         self._check_password_policy()
         self._check_user_policies()
         self._check_unused_roles()
+        self._check_wildcard_trust_policies()
+        self._check_cloudtrail()
+        self._check_access_analyzer()
+        self._check_guardduty()
+        self._check_s3_public_access_block()
 
-        print(f"[*] Scan complete. {len(self.findings)} finding(s).", file=sys.stderr)
+        if self.findings:
+            crit = sum(1 for f in self.findings if f["severity"] == "CRITICAL")
+            high = sum(1 for f in self.findings if f["severity"] == "HIGH")
+            med = sum(1 for f in self.findings if f["severity"] == "MEDIUM")
+            low = sum(1 for f in self.findings if f["severity"] == "LOW")
+            log(f"[*] Scan complete: {C.red(f'{crit} CRITICAL')}  {C.yellow(f'{high} HIGH')}  {med} MEDIUM  {low} LOW")
+        else:
+            self._clean_scan()
+
         return self.findings
+
+    def _clean_scan(self):
+        """Celebrate a clean scan."""
+        msg = """
+================================================================================
+
+  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)
+
+              ALL CLEAR! No findings detected.
+
+    /\\_/\\
+   ( ^w^ )  <  This account is looking good!
+    > ^ <
+
+  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)  ~(=^..^)
+================================================================================
+"""
+        log(msg, "success")
 
     # --- Credential Report Checks (1-7) ---
 
     def _get_credential_report(self) -> list[dict]:
         """Generate and retrieve the IAM credential report."""
-        print("  [+] Generating credential report...", file=sys.stderr)
+        log("  [+] Generating credential report...", "dim")
         for _ in range(10):
             try:
                 self.iam.generate_credential_report()
@@ -273,7 +340,7 @@ class IAMScanner:
                     time.sleep(2)
                     continue
                 raise
-        print("  [!] Credential report not ready after retries.", file=sys.stderr)
+        log("  [!] Credential report not ready after retries.", "warning")
         return []
 
     def _check_credential_report(self):
@@ -292,9 +359,7 @@ class IAMScanner:
                 if row.get("access_key_1_active", "").lower() == "true" or \
                    row.get("access_key_2_active", "").lower() == "true":
                     self.findings.append(finding(
-                        "root_access_keys",
-                        "CRITICAL",
-                        arn,
+                        "root_access_keys", "CRITICAL", arn,
                         "Root account has active access keys. Root access keys should be deleted.",
                         {"access_key_1_active": row.get("access_key_1_active"),
                          "access_key_2_active": row.get("access_key_2_active")},
@@ -303,60 +368,61 @@ class IAMScanner:
                 # --- Check 2: Root account without MFA ---
                 if row.get("mfa_active", "").lower() != "true":
                     self.findings.append(finding(
-                        "root_no_mfa",
-                        "CRITICAL",
-                        arn,
+                        "root_no_mfa", "CRITICAL", arn,
                         "Root account does not have MFA enabled.",
                     ))
-                continue  # Skip remaining user checks for root
+                continue
 
             # --- Check 3: Users without MFA ---
             has_password = row.get("password_enabled", "").lower() == "true"
             has_mfa = row.get("mfa_active", "").lower() == "true"
             if has_password and not has_mfa:
                 self.findings.append(finding(
-                    "user_no_mfa",
-                    "HIGH",
-                    arn,
+                    "user_no_mfa", "HIGH", arn,
                     f"User '{user}' has console access but MFA is not enabled.",
                     {"user": user, "password_enabled": True, "mfa_active": False},
                 ))
 
-            # --- Check 4: Stale access keys (>90 days since rotation) ---
+            # --- Check 4 & 5: Access key checks ---
             for key_num in ("1", "2"):
                 active = row.get(f"access_key_{key_num}_active", "").lower() == "true"
+                if not active:
+                    continue
+
                 rotated = row.get(f"access_key_{key_num}_last_rotated", "")
-                if active:
-                    age = days_since(rotated)
-                    if age is not None and age > STALE_DAYS:
-                        self.findings.append(finding(
-                            "stale_access_key",
-                            "HIGH",
-                            arn,
-                            f"User '{user}' access key {key_num} has not been rotated in {age} days.",
-                            {"user": user, "key_number": key_num, "last_rotated": rotated, "age_days": age},
-                        ))
+                age = days_since(rotated)
+                if age is not None and age > self.stale_days:
+                    self.findings.append(finding(
+                        "stale_access_key", "HIGH", arn,
+                        f"User '{user}' access key {key_num} has not been rotated in {age} days.",
+                        {"user": user, "key_number": key_num, "last_rotated": rotated, "age_days": age},
+                    ))
 
-                    # --- Check 5: Unused access keys ---
-                    last_used = row.get(f"access_key_{key_num}_last_used_date", "")
-                    if last_used in ("N/A", "no_information", ""):
-                        self.findings.append(finding(
-                            "unused_access_key",
-                            "MEDIUM",
-                            arn,
-                            f"User '{user}' access key {key_num} is active but has never been used.",
-                            {"user": user, "key_number": key_num, "last_used": last_used},
-                        ))
+                last_used = row.get(f"access_key_{key_num}_last_used_date", "")
+                if last_used in ("N/A", "no_information", ""):
+                    self.findings.append(finding(
+                        "unused_access_key", "MEDIUM", arn,
+                        f"User '{user}' access key {key_num} is active but has never been used.",
+                        {"user": user, "key_number": key_num, "last_used": last_used},
+                    ))
 
-            # --- Check 6: Console password never used (>90 days) ---
+            # --- Check: Multiple active access keys ---
+            key1_active = row.get("access_key_1_active", "").lower() == "true"
+            key2_active = row.get("access_key_2_active", "").lower() == "true"
+            if key1_active and key2_active:
+                self.findings.append(finding(
+                    "multiple_active_keys", "MEDIUM", arn,
+                    f"User '{user}' has two active access keys. This is almost always a mistake — one should be deactivated.",
+                    {"user": user},
+                ))
+
+            # --- Check 6: Console password never used (>stale_days) ---
             if has_password:
                 last_login = row.get("password_last_used", "")
                 login_age = days_since(last_login)
-                if login_age is not None and login_age > STALE_DAYS:
+                if login_age is not None and login_age > self.stale_days:
                     self.findings.append(finding(
-                        "stale_console_login",
-                        "MEDIUM",
-                        arn,
+                        "stale_console_login", "MEDIUM", arn,
                         f"User '{user}' has not logged into the console in {login_age} days.",
                         {"user": user, "last_login": last_login, "age_days": login_age},
                     ))
@@ -365,27 +431,23 @@ class IAMScanner:
             if has_password:
                 pw_changed = row.get("password_last_changed", "")
                 pw_age = days_since(pw_changed)
-                if pw_age is not None and pw_age > STALE_DAYS:
+                if pw_age is not None and pw_age > self.stale_days:
                     self.findings.append(finding(
-                        "stale_password",
-                        "LOW",
-                        arn,
+                        "stale_password", "LOW", arn,
                         f"User '{user}' has not changed their password in {pw_age} days.",
                         {"user": user, "last_changed": pw_changed, "age_days": pw_age},
                     ))
 
-    # --- Password Policy Check (12) ---
+    # --- Password Policy Check ---
 
     def _check_password_policy(self):
-        """Check 12: Account password policy compliance."""
-        print("  [+] Checking password policy...", file=sys.stderr)
+        log("  [+] Checking password policy...", "dim")
         try:
             policy = self.iam.get_account_password_policy()["PasswordPolicy"]
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchEntity":
                 self.findings.append(finding(
-                    "no_password_policy",
-                    "HIGH",
+                    "no_password_policy", "HIGH",
                     f"arn:aws:iam::{self.account_id}:account",
                     "No custom password policy is configured. AWS default policy is in use.",
                 ))
@@ -409,8 +471,7 @@ class IAMScanner:
 
         if issues:
             self.findings.append(finding(
-                "weak_password_policy",
-                "HIGH",
+                "weak_password_policy", "HIGH",
                 f"arn:aws:iam::{self.account_id}:account",
                 f"Password policy does not meet CIS benchmarks: {'; '.join(issues)}",
                 {"policy": policy, "issues": issues},
@@ -419,69 +480,54 @@ class IAMScanner:
     # --- User Policy Checks (8-10) ---
 
     def _check_user_policies(self):
-        """Checks 8-10: Directly attached policies, inline policies, overprivileged users."""
-        print("  [+] Checking user policies...", file=sys.stderr)
+        log("  [+] Checking user policies...", "dim")
         paginator = self.iam.get_paginator("list_users")
         for page in paginator.paginate():
             for user in page["Users"]:
                 username = user["UserName"]
                 arn = user["Arn"]
 
-                # Check 9: Inline policies
                 try:
                     inline = self.iam.list_user_policies(UserName=username)
                     inline_names = inline.get("PolicyNames", [])
                     if inline_names:
                         self.findings.append(finding(
-                            "inline_user_policy",
-                            "MEDIUM",
-                            arn,
+                            "inline_user_policy", "MEDIUM", arn,
                             f"User '{username}' has {len(inline_names)} inline policy(ies). Use managed policies via roles instead.",
                             {"user": username, "inline_policies": inline_names},
                         ))
                 except ClientError:
                     pass
 
-                # Check 8 + 10: Attached policies
                 try:
                     attached = self.iam.list_attached_user_policies(UserName=username)
                     attached_policies = attached.get("AttachedPolicies", [])
-
                     if attached_policies:
-                        # Check 8: Any directly attached policy
                         self.findings.append(finding(
-                            "directly_attached_policy",
-                            "MEDIUM",
-                            arn,
+                            "directly_attached_policy", "MEDIUM", arn,
                             f"User '{username}' has {len(attached_policies)} directly attached policy(ies). Attach policies to roles or groups instead.",
                             {"user": username, "policies": [p["PolicyName"] for p in attached_policies]},
                         ))
-
-                        # Check 10: Overprivileged
                         for pol in attached_policies:
                             if pol["PolicyArn"] in OVERPRIVILEGED_POLICIES:
                                 self.findings.append(finding(
-                                    "overprivileged_user",
-                                    "HIGH",
-                                    arn,
+                                    "overprivileged_user", "HIGH", arn,
                                     f"User '{username}' has overprivileged policy '{pol['PolicyName']}' directly attached.",
                                     {"user": username, "policy_arn": pol["PolicyArn"], "policy_name": pol["PolicyName"]},
                                 ))
                 except ClientError:
                     pass
 
-    # --- Role Checks (11) ---
+    # --- Role Checks ---
 
     def _check_unused_roles(self):
-        """Check 11: IAM roles not used in >90 days."""
-        print("  [+] Checking unused roles...", file=sys.stderr)
+        log("  [+] Checking unused roles...", "dim")
         paginator = self.iam.get_paginator("list_roles")
         for page in paginator.paginate():
             for role in page["Roles"]:
                 name = role["RoleName"]
                 arn = role["Arn"]
 
-                # Skip AWS service-linked roles
                 if role.get("Path", "").startswith("/aws-service-role/"):
                     continue
 
@@ -492,43 +538,167 @@ class IAMScanner:
                     age = (datetime.now(timezone.utc) - last_used_date.replace(tzinfo=timezone.utc)
                            if last_used_date.tzinfo is None else
                            datetime.now(timezone.utc) - last_used_date).days
-                    if age > STALE_DAYS:
+                    if age > self.stale_days:
                         self.findings.append(finding(
-                            "unused_role",
-                            "MEDIUM",
-                            arn,
+                            "unused_role", "MEDIUM", arn,
                             f"Role '{name}' has not been used in {age} days.",
                             {"role": name, "last_used": last_used_date.isoformat(), "age_days": age},
                         ))
                 else:
-                    # Role has never been used
                     create_date = role.get("CreateDate")
                     if create_date:
                         created_age = (datetime.now(timezone.utc) - create_date.replace(tzinfo=timezone.utc)
                                        if create_date.tzinfo is None else
                                        datetime.now(timezone.utc) - create_date).days
-                        if created_age > STALE_DAYS:
+                        if created_age > self.stale_days:
                             self.findings.append(finding(
-                                "unused_role",
-                                "MEDIUM",
-                                arn,
+                                "unused_role", "MEDIUM", arn,
                                 f"Role '{name}' was created {created_age} days ago and has never been used.",
                                 {"role": name, "created": create_date.isoformat(), "never_used": True, "age_days": created_age},
                             ))
+
+    # --- NEW: Wildcard Trust Policies ---
+
+    def _check_wildcard_trust_policies(self):
+        """Check for roles with Principal: * in their trust policy — anyone can assume them."""
+        log("  [+] Checking role trust policies for wildcards...", "dim")
+        paginator = self.iam.get_paginator("list_roles")
+        for page in paginator.paginate():
+            for role in page["Roles"]:
+                name = role["RoleName"]
+                arn = role["Arn"]
+
+                if role.get("Path", "").startswith("/aws-service-role/"):
+                    continue
+
+                trust = role.get("AssumeRolePolicyDocument", {})
+                for stmt in trust.get("Statement", []):
+                    if stmt.get("Effect") != "Allow":
+                        continue
+                    principal = stmt.get("Principal", {})
+                    # Check for "*" or {"AWS": "*"}
+                    is_wildcard = (
+                        principal == "*"
+                        or principal.get("AWS") == "*"
+                        or (isinstance(principal.get("AWS"), list) and "*" in principal["AWS"])
+                    )
+                    if is_wildcard:
+                        # Check if there's a condition that restricts it
+                        has_condition = bool(stmt.get("Condition"))
+                        severity = "HIGH" if has_condition else "CRITICAL"
+                        detail = f"Role '{name}' has a wildcard trust policy (Principal: *). "
+                        if has_condition:
+                            detail += "A Condition clause exists but should be reviewed."
+                        else:
+                            detail += "ANYONE on the internet can assume this role."
+                        self.findings.append(finding(
+                            "wildcard_trust_policy", severity, arn, detail,
+                            {"role": name, "trust_policy": trust, "has_condition": has_condition},
+                        ))
+                        break  # One finding per role
+
+    # --- NEW: CloudTrail ---
+
+    def _check_cloudtrail(self):
+        """Check if at least one CloudTrail trail is configured."""
+        log("  [+] Checking CloudTrail...", "dim")
+        try:
+            ct = self.session.client("cloudtrail", region_name=self.region)
+            trails = ct.describe_trails().get("trailList", [])
+            if not trails:
+                self.findings.append(finding(
+                    "no_cloudtrail", "CRITICAL",
+                    f"arn:aws:cloudtrail:{self.region}:{self.account_id}:trail",
+                    "No CloudTrail trails are configured. There is NO audit logging for this account.",
+                ))
+        except ClientError as e:
+            log(f"  [!] Could not check CloudTrail: {e}", "warning")
+
+    # --- NEW: IAM Access Analyzer ---
+
+    def _check_access_analyzer(self):
+        """Check if IAM Access Analyzer is enabled in the region."""
+        log("  [+] Checking IAM Access Analyzer...", "dim")
+        try:
+            aa = self.session.client("accessanalyzer", region_name=self.region)
+            analyzers = aa.list_analyzers(type="ACCOUNT").get("analyzers", [])
+            if not analyzers:
+                self.findings.append(finding(
+                    "no_access_analyzer", "HIGH",
+                    f"arn:aws:access-analyzer:{self.region}:{self.account_id}:analyzer",
+                    f"IAM Access Analyzer is not enabled in {self.region}. External access to resources will not be detected.",
+                ))
+        except ClientError as e:
+            log(f"  [!] Could not check Access Analyzer: {e}", "warning")
+
+    # --- NEW: GuardDuty ---
+
+    def _check_guardduty(self):
+        """Check if GuardDuty is enabled."""
+        log("  [+] Checking GuardDuty...", "dim")
+        try:
+            gd = self.session.client("guardduty", region_name=self.region)
+            detectors = gd.list_detectors().get("DetectorIds", [])
+            if not detectors:
+                self.findings.append(finding(
+                    "no_guardduty", "HIGH",
+                    f"arn:aws:guardduty:{self.region}:{self.account_id}:detector",
+                    f"GuardDuty is not enabled in {self.region}. Threat detection is not active.",
+                ))
+        except ClientError as e:
+            log(f"  [!] Could not check GuardDuty: {e}", "warning")
+
+    # --- NEW: S3 Public Access Block ---
+
+    def _check_s3_public_access_block(self):
+        """Check if account-level S3 public access block is enabled."""
+        log("  [+] Checking S3 public access block...", "dim")
+        try:
+            s3control = self.session.client("s3control", region_name=self.region)
+            config = s3control.get_public_access_block(AccountId=self.account_id)
+            pab = config.get("PublicAccessBlockConfiguration", {})
+            issues = []
+            if not pab.get("BlockPublicAcls", False):
+                issues.append("BlockPublicAcls is OFF")
+            if not pab.get("IgnorePublicAcls", False):
+                issues.append("IgnorePublicAcls is OFF")
+            if not pab.get("BlockPublicPolicy", False):
+                issues.append("BlockPublicPolicy is OFF")
+            if not pab.get("RestrictPublicBuckets", False):
+                issues.append("RestrictPublicBuckets is OFF")
+            if issues:
+                self.findings.append(finding(
+                    "s3_public_access", "HIGH",
+                    f"arn:aws:s3:::{self.account_id}",
+                    f"Account-level S3 public access block is not fully enabled: {'; '.join(issues)}",
+                    {"config": pab, "issues": issues},
+                ))
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchPublicAccessBlockConfiguration":
+                self.findings.append(finding(
+                    "s3_public_access", "HIGH",
+                    f"arn:aws:s3:::{self.account_id}",
+                    "No account-level S3 public access block is configured. Buckets can be made public.",
+                ))
+            else:
+                log(f"  [!] Could not check S3 public access block: {e}", "warning")
 
 
 def main():
     parser = argparse.ArgumentParser(description="AWS IAM Hygiene Scanner")
     parser.add_argument("--profile", required=True, help="AWS CLI profile name")
     parser.add_argument("--output", default=None, help="Output file path (default: stdout)")
+    parser.add_argument("--days", type=int, default=90, help="Stale threshold in days (default: 90)")
     parser.add_argument("--update-intel", action="store_true", help="Fetch latest risk intelligence before scanning")
     args = parser.parse_args()
 
     # Load risk intelligence before scanning
     intel = load_risk_intel(update=args.update_intel)
 
-    scanner = IAMScanner(args.profile)
+    scan_start = time.time()
+    scanner = IAMScanner(args.profile, stale_days=args.days)
     findings = scanner.scan()
+    scan_duration = time.time() - scan_start
 
     # Enrich findings with threat context
     findings = [enrich_finding(f, intel) for f in findings]
@@ -540,6 +710,8 @@ def main():
         "region": scanner.region,
         "is_govcloud": scanner.is_govcloud,
         "scan_time": datetime.now(timezone.utc).isoformat(),
+        "scan_duration_seconds": round(scan_duration, 1),
+        "stale_threshold_days": args.days,
         "profile": args.profile,
         "intel_version": intel.get("_metadata", {}).get("version", "unknown"),
         "intel_updated": intel.get("_metadata", {}).get("last_updated", "unknown"),
@@ -555,15 +727,15 @@ def main():
         "findings": findings,
     }
 
-    print(f"[*] {priv_esc_count} finding(s) flagged as privilege escalation risk", file=sys.stderr)
-    print(f"[*] {data_leak_count} finding(s) flagged as data leakage risk", file=sys.stderr)
+    log(f"[*] {C.red(f'{priv_esc_count} priv escalation')} / {C.yellow(f'{data_leak_count} data leakage')} risk(s) flagged")
+    log(f"[*] Completed in {C.bold(f'{scan_duration:.1f}s')}", "success")
 
     output = json.dumps(result, indent=2, default=str)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(output)
-        print(f"[*] Findings written to {args.output}", file=sys.stderr)
+        log(f"[*] Findings written to {args.output}")
     else:
         print(output)
 

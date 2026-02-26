@@ -36,7 +36,7 @@ aws configure sso --profile <your-profile>
 aws configure --profile <your-profile>
 ```
 
-You only need **read-only IAM access**:
+You only need **read-only access**:
 - `iam:GenerateCredentialReport`
 - `iam:GetCredentialReport`
 - `iam:GetAccountPasswordPolicy`
@@ -45,6 +45,10 @@ You only need **read-only IAM access**:
 - `iam:ListAttachedUserPolicies`
 - `iam:ListRoles`
 - `sts:GetCallerIdentity`
+- `cloudtrail:DescribeTrails`
+- `access-analyzer:ListAnalyzers`
+- `guardduty:ListDetectors`
+- `s3:GetAccountPublicAccessBlock`
 
 ### 4. Run the audit
 Open Claude Code in this directory and say:
@@ -79,11 +83,17 @@ That's it. Claude handles everything:
 | 5 | Active but never-used access keys | MEDIUM | Credential Report |
 | 6 | Console access, no login >90 days | MEDIUM | Credential Report |
 | 7 | Password not changed >90 days | LOW | Credential Report |
-| 8 | Directly attached user policies | MEDIUM | IAM API |
-| 9 | Inline policies on users | MEDIUM | IAM API |
-| 10 | Overprivileged users (Admin/PowerUser) | HIGH | IAM API |
-| 11 | Unused IAM roles (>90 days) | MEDIUM | IAM API |
-| 12 | Password policy non-compliance | HIGH | IAM API |
+| 8 | Multiple active access keys per user | MEDIUM | Credential Report |
+| 9 | Directly attached user policies | MEDIUM | IAM API |
+| 10 | Inline policies on users | MEDIUM | IAM API |
+| 11 | Overprivileged users (Admin/PowerUser) | HIGH | IAM API |
+| 12 | Unused IAM roles (>90 days) | MEDIUM | IAM API |
+| 13 | Password policy non-compliance | HIGH | IAM API |
+| 14 | Wildcard trust policies (Principal: *) | CRITICAL/HIGH | IAM API |
+| 15 | No CloudTrail trails configured | CRITICAL | CloudTrail API |
+| 16 | IAM Access Analyzer not enabled | HIGH | Access Analyzer API |
+| 17 | GuardDuty not enabled | HIGH | GuardDuty API |
+| 18 | S3 public access block not enabled | HIGH | S3 Control API |
 
 Every finding is enriched with:
 - CIS AWS Foundations Benchmark reference
@@ -110,6 +120,9 @@ python scanner.py --profile <name>
 
 # Save to file
 python scanner.py --profile <name> --output findings.json
+
+# Custom stale threshold (default: 90 days)
+python scanner.py --profile <name> --days 60 --output findings.json
 
 # Fetch latest threat intel before scanning
 python scanner.py --profile <name> --update-intel --output findings.json
